@@ -85,7 +85,7 @@ struct FileBackupReader {
 
 impl BackupReader for FileBackupReader {
     fn read(&self) -> Result<Vec<Backup>, BackupReadError> {
-        let f = File::open(self.path.clone()).map_err(|o| format!("open: {}", o))?;
+        let f = File::open(&self.path).map_err(|o| format!("open: {}", o))?;
         let mut backups = Vec::new();
         let buf_reader = BufReader::new(f);
         for line_result in buf_reader.lines() {
@@ -127,11 +127,11 @@ struct DropboxDeleter {
 
 impl BackupDeleter for DropboxDeleter {
     fn delete(&self, file: Removal) -> Result<(), BackupDeleteError> {
-        print!("dbx delete: {} ...", &file.0);
-        files::delete_v2(self.client.as_ref(), &DeleteArg::new(file.0.to_owned()))
+        println!("dbx delete: {} ...", &file.0);
+        files::delete_v2(self.client.as_ref(), &DeleteArg::new(file.0))
             .map_err(|o| format!("dbx delete: {}", o))?
             .map_err(|o| format!("dbx delete arg: {}", o))?;
-        print!("dbx delete: {} ... done", &file.0);
+        println!("dbx delete: done");
         Ok(())
     }
 }
@@ -200,7 +200,7 @@ fn main() -> anyhow::Result<()> {
             backup_remover = Box::new(NoopDeleter);
         }
     };
-    let backups = backup_reader.read().context("read backups")?;
+    let mut backups = backup_reader.read().context("read backups")?;
     let mut years: Vec<Year> = Vec::new();
     for (i, backup) in backups.iter().enumerate() {
         let mut year = years.iter_mut().find(|o| o.num == backup.date.year);
@@ -233,7 +233,7 @@ fn main() -> anyhow::Result<()> {
     }
     let removals: Vec<Removal> = days_to_remove
         .into_iter()
-        .map(|o| Removal(&backups[o.idx as usize].name))
+        .map(|o| Removal(std::mem::replace(&mut backups[o.idx as usize].name, String::new())))
         .collect();
     if args.dry_run.unwrap_or_default() {
         for removal in removals {
@@ -248,7 +248,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-struct Removal<'a>(&'a str);
+struct Removal(String);
 
 fn apply_policy(policy: MonthPolicy, month: &Month) -> Vec<Day> {
     match policy {
