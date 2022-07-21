@@ -107,7 +107,7 @@ impl BackupReader for FileBackupReader {
     }
 }
 
-trait BackupDelete {
+trait BackupDeleter {
     fn delete(&self, file: Removal) -> Result<(), BackupDeleteError>;
 }
 
@@ -125,7 +125,7 @@ struct DropboxDeleter {
     client: Rc<UserAuthDefaultClient>,
 }
 
-impl BackupDelete for DropboxDeleter {
+impl BackupDeleter for DropboxDeleter {
     fn delete(&self, file: Removal) -> Result<(), BackupDeleteError> {
         print!("dbx delete: {} ...", &file.0);
         files::delete_v2(self.client.as_ref(), &DeleteArg::new(file.0.to_owned()))
@@ -138,7 +138,7 @@ impl BackupDelete for DropboxDeleter {
 
 struct NoopDeleter;
 
-impl BackupDelete for NoopDeleter {
+impl BackupDeleter for NoopDeleter {
     fn delete(&self, file: Removal) -> Result<(), BackupDeleteError> {
         println!("Noop remove: {}", &file.0);
         Ok(())
@@ -170,7 +170,7 @@ impl FromStr for ReadFrom {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let backup_reader: Box<dyn BackupReader>;
-    let backup_remover: Box<dyn BackupDelete>;
+    let backup_remover: Box<dyn BackupDeleter>;
     match args.read_from {
         ReadFrom::Dropbox => {
             let list_path = args.dbx_path.unwrap_or_default();
