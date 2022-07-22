@@ -234,6 +234,10 @@ fn main() -> anyhow::Result<()> {
             days_to_remove.append(&mut to_remove);
         }
     }
+    if days_to_remove.is_empty() {
+        println!("No backups to remove!");
+        return Ok(());
+    }
     let removals: Vec<Removal> = days_to_remove
         .into_iter()
         .map(|o| Removal(std::mem::take(&mut backups[o.idx as usize].name)))
