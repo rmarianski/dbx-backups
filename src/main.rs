@@ -60,7 +60,7 @@ impl BackupReader for DropboxBackupReader {
         println!("Querying {} ... done", self.list_path);
         if list_folder_result.has_more {
             // list_folder_result.cursor
-            Err(format!("need to handle more values with cursor!"))?
+            Err("need to handle more values with cursor!".to_string())?
         }
         let mut backups = Vec::with_capacity(list_folder_result.entries.len());
         for entry in list_folder_result.entries {
@@ -97,7 +97,7 @@ impl BackupReader for FileBackupReader {
             let date_result = line.parse::<Date>();
             if let Ok(date) = date_result {
                 let backup = Backup {
-                    date: date,
+                    date,
                     name: line.to_owned(),
                 };
                 backups.push(backup);
@@ -182,7 +182,7 @@ fn main() -> anyhow::Result<()> {
             let client = Rc::new(client);
             let dbx_reader = DropboxBackupReader {
                 client: client.clone(),
-                list_path: list_path.to_string(),
+                list_path,
             };
             let dbx_remover = DropboxDeleter{client};
             backup_reader = Box::new(dbx_reader);
@@ -203,8 +203,8 @@ fn main() -> anyhow::Result<()> {
     let mut backups = backup_reader.read().context("read backups")?;
     let mut years: Vec<Year> = Vec::new();
     for (i, backup) in backups.iter().enumerate() {
-        let mut year = years.iter_mut().find(|o| o.num == backup.date.year);
-        let year: &mut Year = if let Some(year) = year.as_deref_mut() {
+        let year = years.iter_mut().find(|o| o.num == backup.date.year);
+        let year: &mut Year = if let Some(year) = year {
             year
         } else {
             let year = Year::new(backup.date.year);
@@ -227,13 +227,13 @@ fn main() -> anyhow::Result<()> {
     for year in years.iter() {
         for (month_idx, month) in year.months.iter().enumerate() {
             let policy = policy_for(cur, year.num, month_idx as u32 + 1);
-            let mut to_remove = apply_policy(policy, &month);
+            let mut to_remove = apply_policy(policy, month);
             days_to_remove.append(&mut to_remove);
         }
     }
     let removals: Vec<Removal> = days_to_remove
         .into_iter()
-        .map(|o| Removal(std::mem::replace(&mut backups[o.idx as usize].name, String::new())))
+        .map(|o| Removal(std::mem::take(&mut backups[o.idx as usize].name)))
         .collect();
     if args.dry_run.unwrap_or_default() {
         for removal in removals {
