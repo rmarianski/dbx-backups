@@ -45,19 +45,19 @@ impl From<String> for BackupReadError {
 
 struct DropboxBackupReader {
     client: Rc<UserAuthDefaultClient>,
-    list_path: String,
+    backup_path: Rc<String>,
 }
 
 impl BackupReader for DropboxBackupReader {
     fn read(&self) -> Result<Vec<Backup>, BackupReadError> {
-        println!("Querying {} ...", self.list_path);
+        println!("Querying {} ...", self.backup_path);
         let list_folder_result = files::list_folder(
             self.client.as_ref(),
-            &ListFolderArg::new(self.list_path.to_string()),
+            &ListFolderArg::new(self.backup_path.to_string()),
         )
         .map_err(|o| format!("dbx read: {}", o))?
         .map_err(|o| format!("list: {}", o))?;
-        println!("Querying {} ... done", self.list_path);
+        println!("Querying {} ... done", self.backup_path);
         if list_folder_result.has_more {
             // list_folder_result.cursor
             Err("need to handle more values with cursor!".to_string())?
@@ -123,12 +123,14 @@ impl From<String> for BackupDeleteError {
 
 struct DropboxDeleter {
     client: Rc<UserAuthDefaultClient>,
+    backup_path: Rc<String>,
 }
 
 impl BackupDeleter for DropboxDeleter {
     fn delete(&self, file: Removal) -> Result<(), BackupDeleteError> {
-        println!("dbx delete: {} ...", &file.0);
-        files::delete_v2(self.client.as_ref(), &DeleteArg::new(file.0))
+        let delete_path = format!("{}/{}", self.backup_path, &file.0);
+        println!("dbx delete: {} ...", &delete_path);
+        files::delete_v2(self.client.as_ref(), &DeleteArg::new(delete_path))
             .map_err(|o| format!("dbx delete: {}", o))?
             .map_err(|o| format!("dbx delete arg: {}", o))?;
         println!("dbx delete: done");
@@ -173,18 +175,19 @@ fn main() -> anyhow::Result<()> {
     let backup_remover: Box<dyn BackupDeleter>;
     match args.read_from {
         ReadFrom::Dropbox => {
-            let list_path = args.dbx_path.unwrap_or_default();
-            if list_path.is_empty() {
+            let backup_path = args.dbx_path.unwrap_or_default();
+            if backup_path.is_empty() {
                 bail!("missing --dbx-path");
             }
             let auth = dropbox_sdk::oauth2::get_auth_from_env_or_prompt();
             let client = UserAuthDefaultClient::new(auth);
             let client = Rc::new(client);
+            let backup_path = Rc::new(backup_path);
             let dbx_reader = DropboxBackupReader {
                 client: client.clone(),
-                list_path,
+                backup_path: backup_path.clone(),
             };
-            let dbx_remover = DropboxDeleter{client};
+            let dbx_remover = DropboxDeleter{client, backup_path};
             backup_reader = Box::new(dbx_reader);
             backup_remover = Box::new(dbx_remover);
         }
