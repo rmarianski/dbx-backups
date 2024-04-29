@@ -10,8 +10,9 @@ use std::{
     io::{BufRead, BufReader},
     num::ParseIntError,
     path::PathBuf,
+    rc::Rc,
     str::FromStr,
-    time::SystemTime, rc::Rc,
+    time::SystemTime,
 };
 
 #[derive(Debug, Parser)]
@@ -187,7 +188,10 @@ fn main() -> anyhow::Result<()> {
                 client: client.clone(),
                 backup_path: backup_path.clone(),
             };
-            let dbx_remover = DropboxDeleter{client, backup_path};
+            let dbx_remover = DropboxDeleter {
+                client,
+                backup_path,
+            };
             backup_reader = Box::new(dbx_reader);
             backup_remover = Box::new(dbx_remover);
         }
@@ -215,7 +219,7 @@ fn main() -> anyhow::Result<()> {
             let idx = years.len() - 1;
             &mut years[idx]
         };
-        let mut month = &mut year.months[(backup.date.month - 1) as usize];
+        let month = &mut year.months[(backup.date.month - 1) as usize];
         month.days[(backup.date.day - 1) as usize] = Some(Day::new(i as u32));
     }
     let seconds_since_epoch = SystemTime::now()
