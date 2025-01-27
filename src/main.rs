@@ -3,7 +3,7 @@ use chrono::{Datelike, NaiveDateTime};
 use clap::Parser;
 use dropbox_sdk::{
     default_client::UserAuthDefaultClient,
-    files::{self, DeleteArg, ListFolderArg},
+    files::{self, DeleteArg, ListFolderArg, ListFolderContinueArg},
 };
 use std::{
     fs::File,
@@ -52,19 +52,33 @@ struct DropboxBackupReader {
 impl BackupReader for DropboxBackupReader {
     fn read(&self) -> Result<Vec<Backup>, BackupReadError> {
         println!("Querying {} ...", self.backup_path);
-        let list_folder_result = files::list_folder(
+        let mut all_entries = Vec::new();
+        let mut list_folder_result = files::list_folder(
             self.client.as_ref(),
             &ListFolderArg::new(self.backup_path.to_string()),
         )
         .map_err(|o| format!("dbx read: {}", o))?
         .map_err(|o| format!("list: {}", o))?;
-        println!("Querying {} ... done", self.backup_path);
+        all_entries.append(&mut list_folder_result.entries);
         if list_folder_result.has_more {
-            // list_folder_result.cursor
-            Err("need to handle more values with cursor!".to_string())?
+            let mut cursor = list_folder_result.cursor;
+            loop {
+                let mut paged_results = files::list_folder_continue(
+                    self.client.as_ref(),
+                    &ListFolderContinueArg::new(cursor),
+                )
+                .map_err(|o| format!("dbx read: {}", o))?
+                .map_err(|o| format!("list folder continue: {}", o))?;
+                all_entries.append(&mut paged_results.entries);
+                if !paged_results.has_more {
+                    break;
+                }
+                cursor = paged_results.cursor;
+            }
         }
-        let mut backups = Vec::with_capacity(list_folder_result.entries.len());
-        for entry in list_folder_result.entries {
+        println!("Querying {} ... done", self.backup_path);
+        let mut backups = Vec::with_capacity(all_entries.len());
+        for entry in all_entries {
             if let files::Metadata::File(metadata) = entry {
                 let backup_result: Result<Date, _> = metadata.name.parse();
                 if let Ok(backup_date) = backup_result {
